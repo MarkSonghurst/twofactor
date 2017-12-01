@@ -9,10 +9,11 @@ import (
 	"crypto/sha512"
 	"encoding/base64"
 	"encoding/hex"
-	"github.com/sec51/convert/bigendian"
 	"net/url"
 	"testing"
 	"time"
+
+	"github.com/sec51/convert/bigendian"
 )
 
 var sha1KeyHex = "3132333435363738393031323334353637383930"
@@ -121,7 +122,7 @@ func TestTOTP(t *testing.T) {
 
 func TestVerificationFailures(t *testing.T) {
 
-	otp, err := NewTOTP("info@sec51.com", "Sec51", crypto.SHA1, 7)
+	otp, err := NewTOTP("info@sec51.com", "Sec51", crypto.SHA1, 7, 30)
 	//checkError(t, err)
 	if err != nil {
 		t.Fatal(err)
@@ -223,7 +224,7 @@ func TestIncrementCounter(t *testing.T) {
 
 func TestSerialization(t *testing.T) {
 	// create a new TOTP
-	otp, err := NewTOTP("info@sec51.com", "Sec51", crypto.SHA512, 8)
+	otp, err := NewTOTP("info@sec51.com", "Sec51", crypto.SHA512, 8, 30)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -349,7 +350,7 @@ func TestProperInitialization(t *testing.T) {
 func TestCounterSynchronization(t *testing.T) {
 
 	// create totp
-	otp, err := NewTOTP("info@sec51.com", "Sec51", crypto.SHA512, 8)
+	otp, err := NewTOTP("info@sec51.com", "Sec51", crypto.SHA512, 8, 30)
 	if err != nil {
 		t.Fatal(err)
 	}

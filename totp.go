@@ -12,16 +12,17 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/sec51/convert"
-	"github.com/sec51/convert/bigendian"
-	"github.com/sec51/cryptoengine"
-	qr "github.com/sec51/qrcode"
 	"hash"
 	"io"
 	"math"
 	"net/url"
 	"strconv"
 	"time"
+
+	"github.com/sec51/convert"
+	"github.com/sec51/convert/bigendian"
+	"github.com/sec51/cryptoengine"
+	qr "github.com/sec51/qrcode"
 )
 
 const (
@@ -43,7 +44,7 @@ type Totp struct {
 	counter                   [counter_size]byte // this is the counter used to synchronize with the client device
 	digits                    int                // total amount of digits of the code displayed on the device
 	issuer                    string             // the company which issues the 2FA
-	account                   string             // usually the suer email or the account id
+	account                   string             // usually the user's email or the account id
 	stepSize                  int                // by default 30 seconds
 	clientOffset              int                // the amount of steps the client is off
 	totalVerificationFailures int                // the total amount of verification failures from the client - by default 10
@@ -75,11 +76,11 @@ func (otp *Totp) getIntCounter() uint64 {
 // issuer: the name of the company/service
 // hash: is the crypto function used: crypto.SHA1, crypto.SHA256, crypto.SHA512
 // digits: is the token amount of digits (6 or 7 or 8)
-// steps: the amount of second the token is valid
-// it autmatically generates a secret key using the golang crypto rand package. If there is not enough entropy the function returns an error
+// steps: the amount of seconds the token is valid. 30 seconds is the RFC recommendation.
+// it automatically generates a secret key using the golang crypto rand package. If there is not enough entropy the function returns an error
 // The key is not encrypted in this package. It's a secret key. Therefore if you transfer the key bytes in the network,
 // please take care of protecting the key or in fact all the bytes.
-func NewTOTP(account, issuer string, hash crypto.Hash, digits int) (*Totp, error) {
+func NewTOTP(account, issuer string, hash crypto.Hash, digits, steps int) (*Totp, error) {
 
 	keySize := hash.Size()
 	key := make([]byte, keySize)
@@ -93,19 +94,19 @@ func NewTOTP(account, issuer string, hash crypto.Hash, digits int) (*Totp, error
 		digits = 8
 	}
 
-	return makeTOTP(key, account, issuer, hash, digits)
+	return makeTOTP(key, account, issuer, hash, digits, steps)
 
 }
 
 // Private function which initialize the TOTP so that it's easier to unit test it
-// Used internnaly
-func makeTOTP(key []byte, account, issuer string, hash crypto.Hash, digits int) (*Totp, error) {
+// Used internally.
+func makeTOTP(key []byte, account, issuer string, hash crypto.Hash, digits, steps int) (*Totp, error) {
 	otp := new(Totp)
 	otp.key = key
 	otp.account = account
 	otp.issuer = issuer
 	otp.digits = digits
-	otp.stepSize = 30 // we set it to 30 seconds which is the recommended value from the RFC
+	otp.stepSize = steps
 	otp.clientOffset = 0
 	otp.hashFunction = hash
 	return otp, nil
@@ -176,8 +177,7 @@ func (otp *Totp) Validate(userCode string) error {
 	otp.totalVerificationFailures++
 	otp.lastVerificationTime = time.Now().UTC() // important to have it in UTC
 
-	// if we got here everything is good
-	return errors.New("Tokens mismatch.")
+	return errors.New("passcode invalid")
 }
 
 // Checks the time difference between the function call time and the parameter
