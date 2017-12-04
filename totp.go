@@ -305,6 +305,16 @@ func (otp *Totp) url() (string, error) {
 	return u.String(), nil
 }
 
+// Secret returns the base32 encoded shared KEY between the server application and the client application,
+// therefore the Secret should be delivered via secure connection.
+func (otp *Totp) Secret() (string, error) {
+	// verify the proper initialization
+	if err := totpHasBeenInitialized(otp); err != nil {
+		return "", err
+	}
+	return base32.StdEncoding.EncodeToString(otp.key), nil
+}
+
 // QR generates a byte array containing QR code encoded PNG image, with level Q error correction,
 // needed for the client apps to generate tokens
 // The QR code should be displayed only the first time the user enabled the Two-Factor authentication.
