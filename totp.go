@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"hash"
 	"io"
-	"log"
 	"math"
 	"net/url"
 	"strconv"
@@ -319,8 +318,7 @@ func (otp *Totp) UserFriendlySecret() (string, error) {
 
 	secret := strings.Replace(base32.StdEncoding.EncodeToString(otp.key), "=", "", -1)
 	//secret := base32.StdEncoding.EncodeToString(otp.key)
-	log.Println("secret: ", secret)
-	log.Printf(`friendly secret: "%s"`, delimitStringN(secret, " ", 4))
+	secret = delimitStringN(secret, " ", 4)
 	return secret, nil
 }
 
