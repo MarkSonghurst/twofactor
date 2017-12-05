@@ -14,9 +14,11 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"log"
 	"math"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/sec51/convert"
@@ -305,14 +307,49 @@ func (otp *Totp) url() (string, error) {
 	return u.String(), nil
 }
 
-// Secret returns the base32 encoded shared KEY between the server application and the client application,
+// UserFriendlySecret returns the base32 encoded shared KEY between the server application and the client application,
 // therefore the Secret should be delivered via secure connection.
-func (otp *Totp) Secret() (string, error) {
+// The secret is rendered User Friendly by splitting it into space delimited portions of 4 characters each,
+// and stripping off trailing "=" characters which can be added as part of the Base32 encoding.
+func (otp *Totp) UserFriendlySecret() (string, error) {
 	// verify the proper initialization
 	if err := totpHasBeenInitialized(otp); err != nil {
 		return "", err
 	}
-	return base32.StdEncoding.EncodeToString(otp.key), nil
+
+	secret := strings.Replace(base32.StdEncoding.EncodeToString(otp.key), "=", "", -1)
+	//secret := base32.StdEncoding.EncodeToString(otp.key)
+	log.Println("secret: ", secret)
+	log.Printf(`friendly secret: "%s"`, delimitStringN(secret, " ", 4))
+	return secret, nil
+}
+
+// delimitStringN will split a string into substrings of size n, using parameter delim as the delimiter.
+func delimitStringN(str, delim string, n int) string {
+	var delimited, sub string
+
+	l := len(str)
+	for i, c := range str {
+		sub = sub + string(c)
+		if (i+1)%n == 0 {
+			delimited = appendDelimiter(delimited, delim, sub)
+			sub = ""
+		} else if (i + 1) == l {
+			delimited = appendDelimiter(delimited, delim, sub)
+		}
+	}
+	return delimited
+}
+
+// appendDelimiter will append to str the supplied string sub, using delim as the delimiter.
+// If str is empty then it will be populated with just sub, with no delimiter.
+func appendDelimiter(str, delim, sub string) string {
+	if str != "" {
+		str = fmt.Sprintf("%s%s%s", str, delim, sub)
+	} else {
+		str = sub
+	}
+	return str
 }
 
 // QR generates a byte array containing QR code encoded PNG image, with level Q error correction,
@@ -472,9 +509,7 @@ func (otp *Totp) ToBytes() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	return encryptedMessage.ToBytes()
-
 }
 
 // TOTPFromBytes converts a byte array to a totp object

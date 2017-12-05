@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -397,4 +398,35 @@ func TestCounterSynchronization(t *testing.T) {
 		t.Errorf("Client offset should be 0, instead we've got %d\n", otp.clientOffset)
 	}
 
+}
+
+func TestSecret(t *testing.T) {
+
+	// create totp
+	otp, err := NewTOTP("info@sec51.com", "Sec51", crypto.SHA256, 6, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secret, err := otp.UserFriendlySecret()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if secret == "" {
+		t.Fatal("Secret is empty!")
+	}
+	if strings.Contains(secret, "=") {
+		t.Fatal(`Secret contains "=" characters`)
+	}
+}
+
+func TestDelimitStringN(t *testing.T) {
+	if s := delimitStringN("", "-", 2); s != "" {
+		t.Fatal("Empty delimited string is not empty")
+	}
+	if s := delimitStringN("string", "-", len("string")+1); s != "string" {
+		t.Fatalf("Undersized string is not as expected, got %s", s)
+	}
+	if s := delimitStringN("stringstringstring", "-", len("string")); s != "string-string-string" {
+		t.Fatalf("Delimited string not as expected, got: %s", s)
+	}
 }
