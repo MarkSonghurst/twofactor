@@ -271,6 +271,14 @@ func calculateToken(counter []byte, digits int, h hash.Hash) string {
 	return fmt.Sprintf(fmtStr, mod)
 }
 
+// Secret returns the underlying base32 encoded secret.
+// This should only be displayed the first time a user enables 2FA,
+// and should be transmitted over a secure connection.
+// Useful for supporting TOTP clients that don't support QR scanning.
+func (otp *Totp) Secret() string {
+	return base32.StdEncoding.EncodeToString(otp.key)
+}
+
 // URL returns a suitable URL, such as for the Google Authenticator app
 // example: otpauth://totp/Example:alice@google.com?secret=JBSWY3DPEHPK3PXP&issuer=Example
 func (otp *Totp) url() (string, error) {
