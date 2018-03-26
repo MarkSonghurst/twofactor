@@ -21,8 +21,8 @@ import (
 
 	"github.com/sec51/convert"
 	"github.com/sec51/convert/bigendian"
-	"github.com/sec51/cryptoengine"
 	qr "github.com/sec51/qrcode"
+	"golang.org/x/crypto/nacl/secretbox"
 )
 
 const (
@@ -44,7 +44,7 @@ type Totp struct {
 	counter                   [counter_size]byte // this is the counter used to synchronize with the client device
 	digits                    int                // total amount of digits of the code displayed on the device
 	issuer                    string             // the company which issues the 2FA
-	account                   string             // usually the suer email or the account id
+	account                   string             // usually the user email or the account id
 	stepSize                  int                // will default to a minimum of 30 seconds
 	clientOffset              int                // the amount of steps the client is off
 	totalVerificationFailures int                // the total amount of verification failures from the client - by default 10
@@ -77,7 +77,7 @@ func (otp *Totp) getIntCounter() uint64 {
 // hash: is the crypto function used: crypto.SHA1, crypto.SHA256, crypto.SHA512
 // digits: is the token amount of digits (6 or 7 or 8)
 // steps: the amount of second the token is valid
-// it autmatically generates a secret key using the golang crypto rand package. If there is not enough entropy the function returns an error
+// it automatically generates a secret key using the golang crypto rand package. If there is not enough entropy the function returns an error
 // The key is not encrypted in this package. It's a secret key. Therefore if you transfer the key bytes in the network,
 // please take care of protecting the key or in fact all the bytes.
 func NewTOTP(account, issuer string, hash crypto.Hash, digits, steps int) (*Totp, error) {
@@ -104,7 +104,7 @@ func NewTOTP(account, issuer string, hash crypto.Hash, digits, steps int) (*Totp
 }
 
 // Private function which initialize the TOTP so that it's easier to unit test it
-// Used internnaly
+// Used internally
 func makeTOTP(key []byte, account, issuer string, hash crypto.Hash, digits, steps int) (*Totp, error) {
 	otp := new(Totp)
 	otp.key = key
@@ -117,7 +117,7 @@ func makeTOTP(key []byte, account, issuer string, hash crypto.Hash, digits, step
 	return otp, nil
 }
 
-// This function validates the user privided token
+// This function validates the user provided token
 // It calculates 3 different tokens. The current one, one before now and one after now.
 // The difference is driven by the TOTP step size
 // Based on which of the 3 steps it succeeds to validates, the client offset is updated.
@@ -341,14 +341,14 @@ func (otp *Totp) QR() ([]byte, error) {
 	return code.PNG(), nil
 }
 
-// ToBytes serialises a TOTP object in a byte array
+// ToBytes serialises a TOTP object into an encrypted byte array
 // Sizes:         4        4      N     8       4        4        N         4          N      4     4          4               8                 4
 // Format: |total_bytes|key_size|key|counter|digits|issuer_size|issuer|account_size|account|steps|offset|total_failures|verification_time|hashFunction_type|
 // hashFunction_type: 0 = SHA1; 1 = SHA256; 2 = SHA512
-// The data is encrypted using the cryptoengine library (which is a wrapper around the golang NaCl library)
+// The data is encrypted using the supplied secret key
 // TODO:
 // 1- improve sizes. For instance the hashFunction_type could be a short.
-func (otp *Totp) ToBytes() ([]byte, error) {
+func (otp *Totp) ToBytes(secretKey []byte) ([]byte, error) {
 
 	// check Totp initialization
 	if err := totpHasBeenInitialized(otp); err != nil {
@@ -357,15 +357,15 @@ func (otp *Totp) ToBytes() ([]byte, error) {
 
 	var buffer bytes.Buffer
 
-	// caluclate the length of the key and create its byte representation
+	// calculate the length of the key and create its byte representation
 	keySize := len(otp.key)
 	keySizeBytes := bigendian.ToInt(keySize) //bigEndianInt(keySize)
 
-	// caluclate the length of the issuer and create its byte representation
+	// calculate the length of the issuer and create its byte representation
 	issuerSize := len(otp.issuer)
 	issuerSizeBytes := bigendian.ToInt(issuerSize)
 
-	// caluclate the length of the account and create its byte representation
+	// calculate the length of the account and create its byte representation
 	accountSize := len(otp.account)
 	accountSizeBytes := bigendian.ToInt(accountSize)
 
@@ -459,59 +459,52 @@ func (otp *Totp) ToBytes() ([]byte, error) {
 		}
 	}
 
-	// encrypt the TOTP bytes
-	engine, err := cryptoengine.InitCryptoEngine(otp.issuer)
-	if err != nil {
+	// Encrypt the TOTP bytes using crypto.nacl.secretbox and the supplied secret
+	// key (of which we only want the first 32 bytes).
+	var secretKeyBytes [32]byte
+	copy(secretKeyBytes[:], secretKey)
+	// Use 192 bits of a crypto.random value for the nonce.
+	var nonce [24]byte
+	if _, err := io.ReadFull(rand.Reader, nonce[:]); err != nil {
 		return nil, err
 	}
-
-	// init the message to be encrypted
-	message, err := cryptoengine.NewMessage(buffer.String(), message_type)
-	if err != nil {
-		return nil, err
-	}
-
-	// encrypt it
-	encryptedMessage, err := engine.NewEncryptedMessage(message)
-	if err != nil {
-		return nil, err
-	}
-
-	return encryptedMessage.ToBytes()
-
+	// Encrypt the TOTP bytes and append the result to the nonce
+	encrypted := secretbox.Seal(nonce[:], buffer.Bytes(), &nonce, &secretKeyBytes)
+	return encrypted, nil
 }
 
 // TOTPFromBytes converts a byte array to a totp object
 // it stores the state of the TOTP object, like the key, the current counter, the client offset,
 // the total amount of verification failures and the last time a verification happened
-func TOTPFromBytes(encryptedMessage []byte, issuer string) (*Totp, error) {
-
-	// init the cryptoengine
-	engine, err := cryptoengine.InitCryptoEngine(issuer)
-	if err != nil {
-		return nil, err
-	}
-
-	// decrypt the message
-	data, err := engine.Decrypt(encryptedMessage)
-	if err != nil {
-		return nil, err
+func TOTPFromBytes(encryptedMessage []byte, issuer string, secretKey []byte) (*Totp, error) {
+	// Decrypt the TOTP bytes using crypto.nacl.secretbox and the supplied secret
+	// key (of which we only want the first 32 bytes).
+	var secretKeyBytes [32]byte
+	copy(secretKeyBytes[:], secretKey)
+	// When you decrypt, you must use the same nonce and key you used to
+	// encrypt the message. In function totp.ToBytes we stored the nonce in the first
+	// 24 bytes of the encrypted data.
+	var decryptNonce [24]byte
+	copy(decryptNonce[:], encryptedMessage[:24])
+	decrypted, ok := secretbox.Open(nil, encryptedMessage[24:], &decryptNonce, &secretKeyBytes)
+	if !ok {
+		return nil, fmt.Errorf("TOTP decryption error")
 	}
 
 	// new reader
-	reader := bytes.NewReader([]byte(data.Text))
+	reader := bytes.NewReader(decrypted)
 
 	// otp object
 	otp := new(Totp)
 
-	// get the lenght
-	lenght := make([]byte, 4)
-	_, err = reader.Read(lenght) // read the 4 bytes for the total lenght
+	// get the length
+	length := make([]byte, 4)
+	_, err := reader.Read(length) // read the 4 bytes for the total length
 	if err != nil && err != io.EOF {
 		return otp, err
 	}
 
-	totalSize := bigendian.FromInt([4]byte{lenght[0], lenght[1], lenght[2], lenght[3]})
+	totalSize := bigendian.FromInt([4]byte{length[0], length[1], length[2], length[3]})
 	buffer := make([]byte, totalSize-4)
 	_, err = reader.Read(buffer)
 	if err != nil && err != io.EOF {
@@ -540,7 +533,7 @@ func TOTPFromBytes(encryptedMessage []byte, issuer string) (*Totp, error) {
 	startOffset = endOffset
 	endOffset = startOffset + 4
 	b = buffer[startOffset:endOffset]
-	otp.digits = bigendian.FromInt([4]byte{b[0], b[1], b[2], b[3]}) //
+	otp.digits = bigendian.FromInt([4]byte{b[0], b[1], b[2], b[3]})
 
 	// read the issuer size
 	startOffset = endOffset
@@ -576,7 +569,7 @@ func TOTPFromBytes(encryptedMessage []byte, issuer string) (*Totp, error) {
 	b = buffer[startOffset:endOffset]
 	otp.clientOffset = bigendian.FromInt([4]byte{b[0], b[1], b[2], b[3]})
 
-	// read the total failuers
+	// read the total failures
 	startOffset = endOffset
 	endOffset = startOffset + 4
 	b = buffer[startOffset:endOffset]

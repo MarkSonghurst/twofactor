@@ -121,6 +121,10 @@ func TestTOTP(t *testing.T) {
 }
 
 func TestVerificationFailures(t *testing.T) {
+	secretKey, err := hex.DecodeString("6368616e676520746869732070617373776f726420746f206120736563726574")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	otp, err := NewTOTP("info@sec51.com", "Sec51", crypto.SHA1, 7, 30)
 	//checkError(t, err)
@@ -163,12 +167,12 @@ func TestVerificationFailures(t *testing.T) {
 	}
 
 	// serialize and deserialize the object and verify again
-	data, err := otp.ToBytes()
+	data, err := otp.ToBytes(secretKey)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	restoredOtp, err := TOTPFromBytes(data, otp.issuer)
+	restoredOtp, err := TOTPFromBytes(data, otp.issuer, secretKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,7 +209,6 @@ func TestVerificationFailures(t *testing.T) {
 			}
 		}
 	}
-
 }
 
 func TestIncrementCounter(t *testing.T) {
@@ -222,7 +225,56 @@ func TestIncrementCounter(t *testing.T) {
 
 }
 
+func TestEncryption(t *testing.T) {
+	secretKey, err := hex.DecodeString("6368616e676520746869732070617373776f726420746f206120736563726574")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// create a new TOTP
+	otp, err := NewTOTP("info@sec51.com", "Sec51", crypto.SHA512, 8, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// set some properties to a value different than the default
+	otp.totalVerificationFailures = 2
+	otp.stepSize = 27
+	otp.lastVerificationTime = time.Now().UTC()
+	otp.clientOffset = 1
+
+	// Serialize it (and encrypt it) to bytes
+	otpData, err := otp.ToBytes(secretKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Deserialize and decrypt it back from bytes to TOTP
+	deserializedOTP, err := TOTPFromBytes(otpData, otp.issuer, secretKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deserializedOTP == nil {
+		t.Error("Could not deserialize back the TOTP object from bytes")
+	}
+
+	// Serialize it (and encrypt it) to bytes again. The nonce will be different from the first time.
+	otpDataAgain, err := deserializedOTP.ToBytes(secretKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Compare the bytes of the two TOTP encrypted blobs. Because the nonce has changed, they will not be the same.
+	if base64.StdEncoding.EncodeToString(otpData) == base64.StdEncoding.EncodeToString(otpDataAgain) {
+		t.Fatal("TOTP serialized and encrypted bytes are the same!")
+	}
+}
+
 func TestSerialization(t *testing.T) {
+	secretKey, err := hex.DecodeString("6368616e676520746869732070617373776f726420746f206120736563726574")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// create a new TOTP
 	otp, err := NewTOTP("info@sec51.com", "Sec51", crypto.SHA512, 8, 30)
 	if err != nil {
@@ -235,19 +287,14 @@ func TestSerialization(t *testing.T) {
 	otp.lastVerificationTime = time.Now().UTC()
 	otp.clientOffset = 1
 
-	// Serialize it to bytes
-	otpData, err := otp.ToBytes()
+	// Serialize it (and encrypt it) to bytes
+	otpData, err := otp.ToBytes(secretKey)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Convert it back from bytes to TOTP
-	deserializedOTP, err := TOTPFromBytes(otpData, otp.issuer)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	deserializedOTPData, err := deserializedOTP.ToBytes()
+	// Deserialize and decrypt it back from bytes to TOTP
+	deserializedOTP, err := TOTPFromBytes(otpData, otp.issuer, secretKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -325,10 +372,6 @@ func TestSerialization(t *testing.T) {
 		t.Error("Deserialized Label property differ from original TOTP")
 	}
 
-	if base64.StdEncoding.EncodeToString(otpData) != base64.StdEncoding.EncodeToString(deserializedOTPData) {
-		t.Error("Problems encoding TOTP to base64")
-	}
-
 	label, err := url.QueryUnescape(otp.label())
 	if err != nil {
 		t.Fatal(err)
@@ -337,7 +380,6 @@ func TestSerialization(t *testing.T) {
 	if label != "Sec51:info@sec51.com" {
 		t.Error("Creation of TOTP Label failed")
 	}
-
 }
 
 func TestProperInitialization(t *testing.T) {

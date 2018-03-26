@@ -16,10 +16,6 @@
 			"Rev": "8ed1f399b5e0a9a9620c74cfd5aec3682d8328ab"
 		},
 		{
-			"ImportPath": "github.com/sec51/cryptoengine",
-			"Rev": "11617a465c082a1e82359b3c059f018f8dcbfc93"
-		},
-		{
 			"ImportPath": "github.com/sec51/gf256",
 			"Rev": "2454accbeb9e6b0e2e53b01e1d641c7157251ed4"
 		},
