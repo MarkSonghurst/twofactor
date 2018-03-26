@@ -459,8 +459,10 @@ func (otp *Totp) ToBytes(secretKey []byte) ([]byte, error) {
 		}
 	}
 
-	// Encrypt the TOTP bytes using crypto.nacl.secretbox and the supplied secret
-	// key (of which we only want the first 32 bytes).
+	// Encrypt the TOTP bytes using crypto.nacl.secretbox and the supplied secret key.
+	if len(secretKey) != 32 {
+		return nil, fmt.Errorf("secret key does not have a length of 32 bytes")
+	}
 	var secretKeyBytes [32]byte
 	copy(secretKeyBytes[:], secretKey)
 	// Use 192 bits of a crypto.random value for the nonce.
@@ -475,10 +477,15 @@ func (otp *Totp) ToBytes(secretKey []byte) ([]byte, error) {
 
 // TOTPFromBytes converts a byte array to a totp object
 // it stores the state of the TOTP object, like the key, the current counter, the client offset,
-// the total amount of verification failures and the last time a verification happened
+// the total amount of verification failures and the last time a verification happened.
 func TOTPFromBytes(encryptedMessage []byte, issuer string, secretKey []byte) (*Totp, error) {
-	// Decrypt the TOTP bytes using crypto.nacl.secretbox and the supplied secret
-	// key (of which we only want the first 32 bytes).
+	if len(encryptedMessage) < 24 {
+		return nil, fmt.Errorf("the TOTP is less than 24 bytes in length")
+	}
+	// Decrypt the TOTP bytes using crypto.nacl.secretbox and the supplied secret key.
+	if len(secretKey) != 32 {
+		return nil, fmt.Errorf("secret key does not have a length of 32 bytes")
+	}
 	var secretKeyBytes [32]byte
 	copy(secretKeyBytes[:], secretKey)
 	// When you decrypt, you must use the same nonce and key you used to
