@@ -460,8 +460,8 @@ func (otp *Totp) ToBytes(secretKey []byte) ([]byte, error) {
 	}
 
 	// Encrypt the TOTP bytes using crypto.nacl.secretbox and the supplied secret key.
-	if len(secretKey) != 32 {
-		return nil, fmt.Errorf("secret key does not have a length of 32 bytes")
+	if len(secretKey) < 32 {
+		return nil, fmt.Errorf("secret key is less than 32 bytes")
 	}
 	var secretKeyBytes [32]byte
 	copy(secretKeyBytes[:], secretKey)
@@ -483,8 +483,8 @@ func TOTPFromBytes(encryptedMessage []byte, issuer string, secretKey []byte) (*T
 		return nil, fmt.Errorf("the TOTP is less than 24 bytes in length")
 	}
 	// Decrypt the TOTP bytes using crypto.nacl.secretbox and the supplied secret key.
-	if len(secretKey) != 32 {
-		return nil, fmt.Errorf("secret key does not have a length of 32 bytes")
+	if len(secretKey) < 32 {
+		return nil, fmt.Errorf("secret key is less than 32 bytes")
 	}
 	var secretKeyBytes [32]byte
 	copy(secretKeyBytes[:], secretKey)
