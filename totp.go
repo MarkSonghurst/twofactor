@@ -348,7 +348,7 @@ func (otp *Totp) QR() ([]byte, error) {
 // The data is encrypted using the supplied secret key
 // TODO:
 // 1- improve sizes. For instance the hashFunction_type could be a short.
-func (otp *Totp) ToBytes(secretKey []byte) ([]byte, error) {
+func (otp *Totp) ToBytes(secretKey [32]byte) ([]byte, error) {
 
 	// check Totp initialization
 	if err := totpHasBeenInitialized(otp); err != nil {
@@ -460,11 +460,7 @@ func (otp *Totp) ToBytes(secretKey []byte) ([]byte, error) {
 	}
 
 	// Encrypt the TOTP bytes using crypto.nacl.secretbox and the supplied secret key.
-	if len(secretKey) < 32 {
-		return nil, fmt.Errorf("secret key is less than 32 bytes")
-	}
-	var secretKeyBytes [32]byte
-	copy(secretKeyBytes[:], secretKey)
+	secretKeyBytes := secretKey
 	// Use 192 bits of a crypto.random value for the nonce.
 	var nonce [24]byte
 	if _, err := io.ReadFull(rand.Reader, nonce[:]); err != nil {
@@ -478,21 +474,17 @@ func (otp *Totp) ToBytes(secretKey []byte) ([]byte, error) {
 // TOTPFromBytes converts a byte array to a totp object
 // it stores the state of the TOTP object, like the key, the current counter, the client offset,
 // the total amount of verification failures and the last time a verification happened.
-func TOTPFromBytes(encryptedMessage []byte, issuer string, secretKey []byte) (*Totp, error) {
+func TOTPFromBytes(encryptedMessage []byte, issuer string, secretKey [32]byte) (*Totp, error) {
 	if len(encryptedMessage) < 24 {
 		return nil, fmt.Errorf("the TOTP is less than 24 bytes in length")
 	}
 	// Decrypt the TOTP bytes using crypto.nacl.secretbox and the supplied secret key.
-	if len(secretKey) < 32 {
-		return nil, fmt.Errorf("secret key is less than 32 bytes")
-	}
-	var secretKeyBytes [32]byte
-	copy(secretKeyBytes[:], secretKey)
 	// When you decrypt, you must use the same nonce and key you used to
 	// encrypt the message. In function totp.ToBytes we stored the nonce in the first
 	// 24 bytes of the encrypted data.
 	var decryptNonce [24]byte
 	copy(decryptNonce[:], encryptedMessage[:24])
+	secretKeyBytes := secretKey
 	decrypted, ok := secretbox.Open(nil, encryptedMessage[24:], &decryptNonce, &secretKeyBytes)
 	if !ok {
 		return nil, fmt.Errorf("TOTP decryption error")
