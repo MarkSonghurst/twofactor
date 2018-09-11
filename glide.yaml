@@ -1,7 +1,8 @@
 package: github.com/MarkSonghurst/twofactor
 import:
 - package: github.com/sec51/convert
-  version: 8ed1f399b5e0a9a9620c74cfd5aec3682d8328ab
+  repo: git@github.com:MarkSonghurst/convert
+  vcs: git
   subpackages:
   - bigendian
   - smallendian
@@ -12,7 +13,6 @@ import:
   subpackages:
   - coding
 - package: golang.org/x/crypto
-  #version: beef0f4390813b96e8e68fd78570396d0f4751fc
   subpackages:
   - curve25519
   - hkdf
